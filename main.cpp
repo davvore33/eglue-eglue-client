@@ -2,6 +2,7 @@
 #include <boost/beast/websocket.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/program_options.hpp>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -12,68 +13,66 @@ namespace websocket = beast::websocket; // from <boost/beast/websocket.hpp>
 namespace net = boost::asio;            // from <boost/asio.hpp>
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 std::string host = "127.0.0.1";
-auto const  port = "12345";
+auto const port = "12345";
 
-// Sends a WebSocket message and prints the response
-int main(int argc, char** argv)
-{
-    try
-    {
-        auto const  text = "LOAD /home/matteo/Documents/eGlue/eglue-server/try.ini\n";
-        auto const  text1 = "GET Section1.Value1\n";
-        auto const  text2 = "SET Section1.Value1 15\n";
+std::string text;
 
-        // The io_context is required for all I/O
+int main(int argc, char **argv) {
+    try {
+        boost::program_options::options_description desc{"Options"};
+        desc.add_options()
+                ("help,h", "Help screen")
+                ("load", boost::program_options::value<std::string>(), "Load path")
+                ("get", boost::program_options::value<std::string>(), "Get key")
+                ("set", boost::program_options::value<std::vector<std::string>>()->multitoken(), "Set key value");
+
+        boost::program_options::variables_map vm;
+        store(parse_command_line(argc, argv, desc), vm);
+        notify(vm);
+
+        if (vm.count("help")) {
+            std::cerr << desc << '\n';
+            exit(1);
+        } else if (vm.count("load")) {
+            text = "LOAD " + vm["load"].as<std::string>() + "\n";
+        } else if (vm.count("get")) {
+            text = "GET " + vm["get"].as<std::string>() + "\n";
+        } else if (vm.count("set")) {
+            std::vector<std::string> options = vm["set"].as<std::vector<std::string>>();
+            text = "SET " + options[0] + " " + options[1] + "\n";
+        } else {
+            std::cerr << desc << '\n';
+            exit(1);
+        }
+    }
+    catch (const boost::program_options::error &ex) {
+        std::cerr << ex.what() << '\n';
+    }
+
+    try {
         net::io_context ioc;
-
-        // These objects perform our I/O
         tcp::resolver resolver{ioc};
         websocket::stream<tcp::socket> ws{ioc};
-
-        // Look up the domain name
         auto const results = resolver.resolve(host, port);
-
-        // Make the connection on the IP address we get from a lookup
         auto ep = net::connect(ws.next_layer(), results);
-
-        // Update the host_ string. This will provide the value of the
-        // Host HTTP header during the WebSocket handshake.
-        // See https://tools.ietf.org/html/rfc7230#section-5.4
         host += ':' + std::to_string(ep.port());
 
-        // Set a decorator to change the User-Agent of the handshake
         ws.set_option(websocket::stream_base::decorator(
-                [](websocket::request_type& req)
-                {
+                [](websocket::request_type &req) {
                     req.set(http::field::user_agent,
                             std::string(BOOST_BEAST_VERSION_STRING) +
                             " websocket-client-coro");
                 }));
 
-        // Perform the websocket handshake
         ws.handshake(host, "/");
-
-        // Send the message
-//        ws.write(net::buffer(std::string(text)));
-        ws.write(net::buffer(std::string(text1)));
-//        ws.write(net::buffer(std::string(text2)));
-
-        // This buffer will hold the incoming message
+        ws.write(net::buffer(std::string(text)));
         beast::flat_buffer buffer;
-
-        // Read a message into our buffer
         ws.read(buffer);
-
-        // Close the WebSocket connection
         ws.close(websocket::close_code::normal);
 
-        // If we get here then the connection is closed gracefully
-
-        // The make_printable() function helps print a ConstBufferSequence
-        std::cout << beast::make_printable(buffer.data()) << std::endl;
+        std::cerr << beast::make_printable(buffer.data()) << std::endl;
     }
-    catch(std::exception const& e)
-    {
+    catch (std::exception const &e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return EXIT_FAILURE;
     }
