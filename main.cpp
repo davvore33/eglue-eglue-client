@@ -3,6 +3,7 @@
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/program_options.hpp>
+#include <boost/log/trivial.hpp>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -45,8 +46,8 @@ int main(int argc, char **argv) {
             exit(1);
         }
     }
-    catch (const boost::program_options::error &ex) {
-        std::cerr << ex.what() << '\n';
+    catch (const boost::program_options::error &e) {
+        BOOST_LOG_TRIVIAL(error) << "Error " << e.what();
     }
 
     try {
@@ -70,10 +71,10 @@ int main(int argc, char **argv) {
         ws.read(buffer);
         ws.close(websocket::close_code::normal);
 
-        std::cerr << beast::make_printable(buffer.data()) << std::endl;
+        BOOST_LOG_TRIVIAL(info) << beast::make_printable(buffer.data());
     }
     catch (std::exception const &e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        BOOST_LOG_TRIVIAL(error) << "Error " << e.what();
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
